@@ -6,60 +6,24 @@ from pickle import load
 import tensorflow
 import os
 from numpy import argmax
-from keras.preprocessing.sequence import pad_sequences
-from keras.applications.vgg16 import VGG16
-from keras.preprocessing.image import load_img
-from keras.preprocessing.image import img_to_array
-from keras.applications.vgg16 import preprocess_input
-from keras.models import Model
-from keras.models import load_model
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.applications.vgg16 import VGG16
+from tensorflow.keras.preprocessing.image import load_img
+from tensorflow.keras.preprocessing.image import img_to_array
+from tensorflow.keras.applications.vgg16 import preprocess_input
+from tensorflow.keras.models import Model
+from tensorflow.keras.models import load_model
 
 class Predictor(cog.Predictor):
     def setup(self):
       """Load the model into memory to make running multiple predictions efficient"""
       # load the tokenizer
       self.tokenizer = load(open('./tokenizer.pkl', 'rb'))
-      # pre-define the max sequence length (from training)
-      self.max_length = 34
       # load the model
       self.model = load_model('./model_18.h5')
     
-    # map an integer to a word
-    def word_for_id(integer, self):
-      for word, index in self.tokenizer.word_index.items():
-        if index == integer:
-          return word
-      return None
-
-    # generate a description for an image
-    def generate_desc(self, photo):
-      # seed the generation process
-      in_text = 'startseq'
-      # iterate over the whole length of the sequence
-      for i in range(self.max_length):
-        # integer encode input sequence
-        sequence = self.tokenizer.texts_to_sequences([in_text])[0]
-        # pad input
-        sequence = pad_sequences([sequence], maxlen=self.max_length)
-        # predict next word
-        yhat = self.model.predict([photo,sequence], verbose=0)
-        # convert probability to integer
-        yhat = argmax(yhat)
-        # map integer to word
-        word = word_for_id(yhat, self)
-        # stop if we cannot map the word
-        if word is None:
-          break
-        # append as input for generating the next word
-        in_text += ' ' + word
-        # stop if we predict the end of the sequence
-        if word == 'endseq':
-          break
-      return in_text
-
-
-
-    @cog.input("image", type=cog.Path, help="Image to descripe")
+    
+    @cog.input("input", type=cog.Path, help="Image to descripe")
     def predict(self, input):
         """Run a single prediction on the model"""
         # load the photo
@@ -77,12 +41,39 @@ class Predictor(cog.Predictor):
         model = Model(inputs=model.inputs, outputs=model.layers[-2].output)
         feature = model.predict(image, verbose=0)
         # generate description
-        description = generate_desc(self ,feature)
+        # seed the generation process
+        in_text = 'startseq'
+        # iterate over the whole length of the sequence
+        for i in range(34):
+          # integer encode input sequence
+          sequence = self.tokenizer.texts_to_sequences([in_text])[0]
+          # pad input
+          sequence = pad_sequences([sequence], maxlen=34)
+          # predict next word
+          yhat = self.model.predict([feature,sequence], verbose=0)
+          # convert probability to integer
+          yhat = argmax(yhat)
+          # map integer to word
+          word = ""
+          for word1, index in self.tokenizer.word_index.items():
+            if index == yhat:
+              word =word1
+          # stop if we cannot map the word
+          if word is None:
+            break
+          # append as input for generating the next word
+          in_text += ' ' + word
+          # stop if we predict the end of the sequence
+          if word == 'endseq':
+            break
+
         #Remove startseq and endseq
-        query = description
+        query = in_text
         stopwords = ['startseq','endseq']
         querywords = query.split()
         resultwords  = [word for word in querywords if word.lower() not in stopwords]
         result = ' '.join(resultwords)
         # Return the result 
         return result 
+        
+        
